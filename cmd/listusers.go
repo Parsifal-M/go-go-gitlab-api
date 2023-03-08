@@ -4,7 +4,10 @@ Copyright © 2023 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -12,28 +15,58 @@ import (
 // listusersCmd represents the listusers command
 var listusersCmd = &cobra.Command{
 	Use:   "listusers",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "List all users in GitLab SaaS",
+	Long: `This command lists all users part of your GitLab SaaS instance.
+`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("listusers called")
+		url, _ := cmd.Flags().GetString("url")
+		if url == "" {
+			fmt.Println("GitLab instance URL is required. Use the --url flag to specify it.")
+			os.Exit(1)
+		}
+
+		client := &http.Client{}
+		req, err := http.NewRequest("GET", fmt.Sprintf("%s/api/v4/users", url), nil)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		req.Header.Set("PRIVATE-TOKEN", "<<YOUR_GITLAB_PERSONAL_ACCESS_TOKEN>>")
+
+		resp, err := client.Do(req)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			fmt.Printf("Error: %s\n", resp.Status)
+			os.Exit(1)
+		}
+
+		var users []struct {
+			ID       int    `json:"id"`
+			Username string `json:"username"`
+			Name     string `json:"name"`
+			Email    string `json:"email"`
+		}
+		err = json.NewDecoder(resp.Body).Decode(&users)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		for _, u := range users {
+			fmt.Printf("ID: %d, Username: %s, Name: %s, Email: %s\n", u.ID, u.Username, u.Name, u.Email)
+		}
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(listusersCmd)
 
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// listusersCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// listusersCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	listusersCmd.Flags().String("url", "", "GitLab instance URL (required)")
+	listusersCmd.MarkFlagRequired("url")
 }
