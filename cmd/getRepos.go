@@ -132,5 +132,5 @@ func init() {
 	getReposCmd.Flags().StringP("url", "u", "", "GitLab instance URL")
 	getReposCmd.Flags().StringP("token", "t", "", "GitLab personal access token")
 	getReposCmd.Flags().StringP("group", "g", "", "GitLab group name")
-	getReposCmd.Flags().StringP("active", "a", "", "Only return repos that have been active in the specified duration (e.g. 1h, 1d, 1w, 1m, 1y)")
+	getReposCmd.Flags().StringP("active", "a", "", "Only return repos that have been active in the specified duration (e.g. 24h)")
 }
