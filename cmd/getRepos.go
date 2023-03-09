@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -38,9 +39,20 @@ to quickly create a Cobra application.`,
 			group = promptForInput("Enter GitLab group name: ")
 		}
 
+		var duration time.Duration
+		if cmd.Flags().Changed("active") {
+			active, _ := cmd.Flags().GetString("active")
+			var err error
+			duration, err = time.ParseDuration(active)
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+		}
+
 		client := &http.Client{}
 		page := 1
-		perPage := 200
+		perPage := 50
 		repos := []struct {
 			Name              string `json:"name"`
 			NameWithNamespace string `json:"name_with_namespace"`
@@ -49,7 +61,7 @@ to quickly create a Cobra application.`,
 		}{}
 
 		for {
-			req, err := http.NewRequest("GET", fmt.Sprintf("%s/api/v4/groups/%s/projects?per_page=%d&page=%d", url, group, perPage, page), nil)
+			req, err := http.NewRequest("GET", fmt.Sprintf("%s/api/v4/groups/%s/projects?per_page=%d&page=%d&include_subgroups=true", url, group, perPage, page), nil)
 			if err != nil {
 				fmt.Println(err)
 				os.Exit(1)
@@ -85,15 +97,32 @@ to quickly create a Cobra application.`,
 				break
 			}
 
-			repos = append(repos, pageRepos...)
-			page++
+			for _, r := range pageRepos {
+				lastActivityTime, err := time.Parse(time.RFC3339, r.LastActivityAt)
+				if err != nil {
+					fmt.Println(err)
+					os.Exit(1)
+				}
 
+				if cmd.Flags().Changed("active") {
+					// Calculate the duration since the last activity time of the repository
+					durationSinceLastActivity := time.Since(lastActivityTime)
+
+					// Check if the duration since the last activity is less than the duration specified by the user
+					if durationSinceLastActivity < duration {
+						repos = append(repos, r)
+					}
+				} else {
+					repos = append(repos, r)
+				}
+			}
+
+			page++
 		}
 
 		for _, r := range repos {
-			fmt.Printf("Name: %s\n, Repo: %s\n, WebURL: %s\n, LastActivity: %s\n", r.Name, r.NameWithNamespace, r.WebURL, r.LastActivityAt)
+			fmt.Printf("Name: %s\nRepo: %s\nWebURL: %s\nLastActivity: %s\n", r.Name, r.NameWithNamespace, r.WebURL, r.LastActivityAt)
 		}
-
 	},
 }
 
@@ -103,5 +132,5 @@ func init() {
 	getReposCmd.Flags().StringP("url", "u", "", "GitLab instance URL")
 	getReposCmd.Flags().StringP("token", "t", "", "GitLab personal access token")
 	getReposCmd.Flags().StringP("group", "g", "", "GitLab group name")
-	getReposCmd.Flags().StringP("output", "o", "", "Output file")
+	getReposCmd.Flags().StringP("active", "a", "", "Only return repos that have been active in the specified duration (e.g. 1h, 1d, 1w, 1m, 1y)")
 }
